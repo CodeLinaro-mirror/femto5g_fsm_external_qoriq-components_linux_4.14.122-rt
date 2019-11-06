@@ -62,12 +62,9 @@
  * Rx FQ taildrop threshold will ensure only a reasonable number of frames
  * will be pending at any given time.
  */
-#define DPAA2_ETH_NUM_BUFS_PER_CH	1024
-#define DPAA2_ETH_REFILL_THRESH(priv)	\
-	((priv)->max_bufs_per_ch - DPAA2_ETH_BUFS_PER_CMD)
-
-/* Global buffer quota in case flow control is enabled */
-#define DPAA2_ETH_NUM_BUFS_FC		256
+#define DPAA2_ETH_NUM_BUFS		1024
+#define DPAA2_ETH_REFILL_THRESH \
+	(DPAA2_ETH_NUM_BUFS - DPAA2_ETH_BUFS_PER_CMD)
 
 /* Hardware requires alignment for ingress/egress buffer addresses */
 #define DPAA2_ETH_TX_BUF_ALIGN		64
@@ -309,7 +306,7 @@ struct dpaa2_eth_priv;
 struct dpaa2_eth_fq {
 	u32 fqid;
 	u32 tx_qdbin;
-	u32 tx_fqid;
+	u32 tx_fqid[DPAA2_ETH_MAX_TCS];
 	u16 flowid;
 	u8 tc;
 	int target_cpu;
@@ -367,8 +364,6 @@ struct dpaa2_eth_priv {
 
 	u8 num_channels;
 	struct dpaa2_eth_channel *channel[DPAA2_ETH_MAX_DPCONS];
-	int max_bufs_per_ch;
-	int refill_thresh;
 
 	bool has_xdp_prog;
 
@@ -407,7 +402,7 @@ struct dpaa2_eth_priv {
 	u64 rx_cls_fields;
 	struct dpaa2_eth_cls_rule *cls_rule;
 	u8 rx_cls_enabled;
-#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct dpaa2_debugfs dbg;
 #endif
 	struct dpni_tx_shaping_cfg shaping_cfg;

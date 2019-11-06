@@ -33,9 +33,6 @@
 #include "dpaa_sys.h"
 
 #include <soc/fsl/bman.h>
-#include <linux/dma-contiguous.h>
-#include <linux/of_address.h>
-#include <linux/dma-mapping.h>
 
 /* Portal processing (interrupt) sources */
 #define BM_PIRQ_RCRI	0x00000002	/* RCR Ring (below threshold) */
@@ -81,3 +78,8 @@ int bman_p_irqsource_add(struct bman_portal *p, u32 bits);
 
 const struct bm_portal_config *
 bman_get_bm_portal_config(const struct bman_portal *portal);
+
+int bman_requires_cleanup(void);
+void bman_done_cleanup(void);
+
+int bm_shutdown_pool(u32 bpid);

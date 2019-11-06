@@ -723,6 +723,7 @@ static int build_single_fd(struct dpaa2_eth_priv *priv,
  * dpaa2_eth_tx().
  */
 static void free_tx_fd(const struct dpaa2_eth_priv *priv,
+		       struct dpaa2_eth_fq *fq,
 		       const struct dpaa2_fd *fd, bool in_napi)
 {
 	struct device *dev = priv->net_dev->dev.parent;
@@ -731,6 +732,7 @@ static void free_tx_fd(const struct dpaa2_eth_priv *priv,
 	unsigned char *buffer_start;
 	struct dpaa2_eth_swa *swa;
 	u8 fd_format = dpaa2_fd_get_format(fd);
+	u32 fd_len = dpaa2_fd_get_len(fd);
 
 	fd_addr = dpaa2_fd_get_addr(fd);
 	buffer_start = dpaa2_iova_to_virt(priv->iommu_domain, fd_addr);
@@ -764,6 +766,11 @@ static void free_tx_fd(const struct dpaa2_eth_priv *priv,
 	} else {
 		netdev_dbg(priv->net_dev, "Invalid FD format\n");
 		return;
+	}
+
+	if (swa->type != DPAA2_ETH_SWA_XDP && in_napi) {
+		fq->dq_frames++;
+		fq->dq_bytes += fd_len;
 	}
 
 	if (swa->type == DPAA2_ETH_SWA_XDP) {
@@ -889,7 +896,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
 	if (unlikely(err < 0)) {
 		percpu_stats->tx_errors++;
 		/* Clean up everything, including freeing the skb */
-		free_tx_fd(priv, &fd, false);
+		free_tx_fd(priv, fq, &fd, false);
 		netdev_tx_completed_queue(nq, 1, fd_len);
 	} else {
 		percpu_stats->tx_packets++;
@@ -899,7 +906,7 @@ static netdev_tx_t dpaa2_eth_tx(struct sk_buff *skb, struct net_device *net_dev)
 	return NETDEV_TX_OK;
 
 err_ceetm_classify:
-	free_tx_fd(priv, &fd, false);
+	free_tx_fd(priv, fq, &fd, false);
 err_build_fd:
 err_alloc_headroom:
 	dev_kfree_skb(skb);
@@ -925,12 +932,9 @@ static void dpaa2_eth_tx_conf(struct dpaa2_eth_priv *priv,
 	percpu_extras->tx_conf_frames++;
 	percpu_extras->tx_conf_bytes += fd_len;
 
-	fq->dq_frames++;
-	fq->dq_bytes += fd_len;
-
 	/* Check frame errors in the FD field */
 	fd_errors = dpaa2_fd_get_ctrl(fd) & DPAA2_FD_TX_ERR_MASK;
-	free_tx_fd(priv, fd, true);
+	free_tx_fd(priv, fq, fd, true);
 
 	if (likely(!fd_errors))
 		return;
@@ -1067,8 +1071,7 @@ static int seed_pool(struct dpaa2_eth_priv *priv, u16 bpid)
 	 */
 	preempt_disable();
 	for (j = 0; j < priv->num_channels; j++) {
-		priv->channel[j]->buf_count = 0;
-		for (i = 0; i < priv->max_bufs_per_ch;
+		for (i = 0; i < DPAA2_ETH_NUM_BUFS;
 		     i += DPAA2_ETH_BUFS_PER_CMD) {
 			new_count = add_bufs(priv, priv->channel[j], bpid);
 			priv->channel[j]->buf_count += new_count;
@@ -1106,10 +1109,13 @@ static void drain_bufs(struct dpaa2_eth_priv *priv, int count)
 
 static void drain_pool(struct dpaa2_eth_priv *priv)
 {
-	preempt_disable();
+	int i;
+
 	drain_bufs(priv, DPAA2_ETH_BUFS_PER_CMD);
 	drain_bufs(priv, 1);
-	preempt_enable();
+
+	for (i = 0; i < priv->num_channels; i++)
+		priv->channel[i]->buf_count = 0;
 }
 
 /* Function is called from softirq context only, so we don't need to guard
@@ -1121,7 +1127,7 @@ static int refill_pool(struct dpaa2_eth_priv *priv,
 {
 	int new_count;
 
-	if (likely(ch->buf_count >= priv->refill_thresh))
+	if (likely(ch->buf_count >= DPAA2_ETH_REFILL_THRESH))
 		return 0;
 
 	do {
@@ -1131,9 +1137,9 @@ static int refill_pool(struct dpaa2_eth_priv *priv,
 			break;
 		}
 		ch->buf_count += new_count;
-	} while (ch->buf_count < priv->max_bufs_per_ch);
+	} while (ch->buf_count < DPAA2_ETH_NUM_BUFS);
 
-	if (unlikely(ch->buf_count < priv->max_bufs_per_ch))
+	if (unlikely(ch->buf_count < DPAA2_ETH_NUM_BUFS))
 		return -ENOMEM;
 
 	return 0;
@@ -1227,7 +1233,7 @@ static int dpaa2_eth_poll(struct napi_struct *napi, int budget)
 	work_done = max(rx_cleaned, 1);
 
 out:
-	if (txc_fq) {
+	if (txc_fq && txc_fq->dq_frames) {
 		nq = netdev_get_tx_queue(priv->net_dev, txc_fq->flowid);
 		netdev_tx_completed_queue(nq, txc_fq->dq_frames,
 					  txc_fq->dq_bytes);
@@ -1334,8 +1340,6 @@ static int dpaa2_eth_open(struct net_device *net_dev)
 			   priv->dpbp_dev->obj_desc.id, priv->bpid);
 	}
 
-	priv->refill_thresh = DPAA2_ETH_REFILL_THRESH(priv);
-
 	err = dpni_enable(priv->mc_io, 0, priv->mc_token);
 	if (err < 0) {
 		netdev_err(net_dev, "dpni_enable() failed\n");
@@ -1355,7 +1359,6 @@ static int dpaa2_eth_open(struct net_device *net_dev)
 
 link_state_err:
 enable_err:
-	priv->refill_thresh = 0;
 	drain_pool(priv);
 	return err;
 }
@@ -1387,8 +1390,6 @@ static int dpaa2_eth_stop(struct net_device *net_dev)
 		 */
 		err = -ETIMEDOUT;
 	}
-
-	priv->refill_thresh = 0;
 
 	/* Wait for all running napi poll routines to finish, so that no
 	 * new refill operations are started
@@ -1737,11 +1738,10 @@ static inline int dpaa2_eth_enqueue_qd(struct dpaa2_eth_priv *priv,
 
 static inline int dpaa2_eth_enqueue_fq(struct dpaa2_eth_priv *priv,
 				       struct dpaa2_eth_fq *fq,
-				       struct dpaa2_fd *fd,
-				       u8 prio __always_unused)
+				       struct dpaa2_fd *fd, u8 prio)
 {
 	return dpaa2_io_service_enqueue_fq(fq->channel->dpio,
-					   fq->tx_fqid, fd);
+					   fq->tx_fqid[prio], fd);
 }
 
 static void set_enqueue_mode(struct dpaa2_eth_priv *priv)
@@ -1758,7 +1758,7 @@ static void update_tx_fqids(struct dpaa2_eth_priv *priv)
 	struct dpaa2_eth_fq *fq;
 	struct dpni_queue queue;
 	struct dpni_queue_id qid = {0};
-	int i, err;
+	int i, j, err;
 
 	/* We only use Tx FQIDs for FQID-based enqueue, so check
 	 * if DPNI version supports it before updating FQIDs
@@ -1771,15 +1771,17 @@ static void update_tx_fqids(struct dpaa2_eth_priv *priv)
 		fq = &priv->fq[i];
 		if (fq->type != DPAA2_TX_CONF_FQ)
 			continue;
-		err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
-				     DPNI_QUEUE_TX, 0, fq->flowid,
-				     &queue, &qid);
-		if (err)
-			goto out_err;
+		for (j = 0; j < dpaa2_eth_tc_count(priv); j++) {
+			err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
+					     DPNI_QUEUE_TX, j, fq->flowid,
+					     &queue, &qid);
+			if (err)
+				goto out_err;
 
-		fq->tx_fqid = qid.fqid;
-		if (fq->tx_fqid == 0)
-			goto out_err;
+			fq->tx_fqid[j] = qid.fqid;
+			if (fq->tx_fqid[j] == 0)
+				goto out_err;
+		}
 	}
 
 	return;
@@ -2392,9 +2394,6 @@ static int setup_dpbp(struct dpaa2_eth_priv *priv)
 	}
 	priv->bpid = dpbp_attrs.bpid;
 
-	/* By default we start with flow control enabled */
-	priv->max_bufs_per_ch = DPAA2_ETH_NUM_BUFS_FC / priv->num_channels;
-
 	return 0;
 
 err_get_attr:
@@ -2528,15 +2527,10 @@ static int setup_rx_flow(struct dpaa2_eth_priv *priv,
 	queue.destination.type = DPNI_DEST_DPCON;
 	queue.destination.priority = 1;
 	queue.user_context = (u64)(uintptr_t)fq;
-	queue.flc.stash_control = 1;
-	queue.flc.value &= 0xFFFFFFFFFFFFFFC0;
-	/* 01 01 00 - data, annotation, flow context*/
-	queue.flc.value |= 0x14;
 
 	err = dpni_set_queue(priv->mc_io, 0, priv->mc_token,
 			     DPNI_QUEUE_RX, fq->tc, fq->flowid,
-			     DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST |
-			     DPNI_QUEUE_OPT_FLC,
+			     DPNI_QUEUE_OPT_USER_CTX | DPNI_QUEUE_OPT_DEST,
 			     &queue);
 	if (err) {
 		dev_err(dev, "dpni_set_queue(RX) failed\n");
@@ -2624,8 +2618,6 @@ int set_rx_taildrop(struct dpaa2_eth_priv *priv)
 	case DPAA2_ETH_TD_NONE:
 		memset(&td_queue, 0, sizeof(struct dpni_taildrop));
 		memset(&td_group, 0, sizeof(struct dpni_taildrop));
-		priv->max_bufs_per_ch = DPAA2_ETH_NUM_BUFS_FC /
-					priv->num_channels;
 		break;
 	case DPAA2_ETH_TD_QUEUE:
 		memset(&td_group, 0, sizeof(struct dpni_taildrop));
@@ -2633,7 +2625,6 @@ int set_rx_taildrop(struct dpaa2_eth_priv *priv)
 		td_queue.units = DPNI_CONGESTION_UNIT_BYTES;
 		td_queue.threshold = DPAA2_ETH_TAILDROP_THRESH /
 				     dpaa2_eth_tc_count(priv);
-		priv->max_bufs_per_ch = DPAA2_ETH_NUM_BUFS_PER_CH;
 		break;
 	case DPAA2_ETH_TD_GROUP:
 		memset(&td_queue, 0, sizeof(struct dpni_taildrop));
@@ -2641,8 +2632,6 @@ int set_rx_taildrop(struct dpaa2_eth_priv *priv)
 		td_group.units = DPNI_CONGESTION_UNIT_FRAMES;
 		td_group.threshold = NAPI_POLL_WEIGHT *
 				     dpaa2_eth_queue_count(priv);
-		priv->max_bufs_per_ch = NAPI_POLL_WEIGHT *
-					dpaa2_eth_tc_count(priv);
 		break;
 	default:
 		break;
@@ -2656,8 +2645,6 @@ int set_rx_taildrop(struct dpaa2_eth_priv *priv)
 	if (err)
 		return err;
 
-	priv->refill_thresh = DPAA2_ETH_REFILL_THRESH(priv);
-
 	return 0;
 }
 
@@ -2667,17 +2654,21 @@ static int setup_tx_flow(struct dpaa2_eth_priv *priv,
 	struct device *dev = priv->net_dev->dev.parent;
 	struct dpni_queue queue;
 	struct dpni_queue_id qid;
-	int err;
+	int i, err;
 
-	err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
-			     DPNI_QUEUE_TX, 0, fq->flowid, &queue, &qid);
-	if (err) {
-		dev_err(dev, "dpni_get_queue(TX) failed\n");
-		return err;
+	for (i = 0; i < dpaa2_eth_tc_count(priv); i++) {
+		err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
+				     DPNI_QUEUE_TX, i, fq->flowid,
+				     &queue, &qid);
+		if (err) {
+			dev_err(dev, "dpni_get_queue(TX) failed\n");
+			return err;
+		}
+		fq->tx_fqid[i] = qid.fqid;
 	}
 
+	/* All Tx queues belonging to the same flowid have the same qdbin */
 	fq->tx_qdbin = qid.qdbin;
-	fq->tx_fqid = qid.fqid;
 
 	err = dpni_get_queue(priv->mc_io, 0, priv->mc_token,
 			     DPNI_QUEUE_TX_CONFIRM, 0, fq->flowid,
@@ -3356,6 +3347,9 @@ static irqreturn_t dpni_irq0_handler_thread(int irq_num, void *arg)
 	if (status & DPNI_IRQ_EVENT_LINK_CHANGED)
 		link_state_update(netdev_priv(net_dev));
 
+	if (status & DPNI_IRQ_EVENT_ENDPOINT_CHANGED)
+		set_mac_addr(netdev_priv(net_dev));
+
 	return IRQ_HANDLED;
 }
 
@@ -3381,7 +3375,8 @@ static int setup_irqs(struct fsl_mc_device *ls_dev)
 	}
 
 	err = dpni_set_irq_mask(ls_dev->mc_io, 0, ls_dev->mc_handle,
-				DPNI_IRQ_INDEX, DPNI_IRQ_EVENT_LINK_CHANGED);
+				DPNI_IRQ_INDEX, DPNI_IRQ_EVENT_LINK_CHANGED |
+				DPNI_IRQ_EVENT_ENDPOINT_CHANGED);
 	if (err < 0) {
 		dev_err(&ls_dev->dev, "dpni_set_irq_mask(): %d\n", err);
 		goto free_irq;
@@ -3929,7 +3924,7 @@ static int dpaa2_eth_probe(struct fsl_mc_device *dpni_dev)
 	}
 
 	dpaa2_eth_sysfs_init(&net_dev->dev);
-#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	dpaa2_dbg_add(priv);
 #endif
 
@@ -3977,7 +3972,7 @@ static int dpaa2_eth_remove(struct fsl_mc_device *ls_dev)
 	net_dev = dev_get_drvdata(dev);
 	priv = netdev_priv(net_dev);
 
-#ifdef CONFIG_FSL_DPAA2_ETH_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	dpaa2_dbg_remove(priv);
 #endif
 	dpaa2_eth_sysfs_remove(&net_dev->dev);

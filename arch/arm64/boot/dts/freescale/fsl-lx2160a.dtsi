@@ -2,7 +2,7 @@
 //
 // Device Tree Include file for Layerscape-LX2160A family SoC.
 //
-// Copyright 2018 NXP
+// Copyright 2018-2019 NXP
 
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -33,6 +33,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster0_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@1 {
@@ -48,6 +49,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster0_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@100 {
@@ -63,6 +65,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster1_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@101 {
@@ -78,6 +81,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster1_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@200 {
@@ -93,6 +97,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster2_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@201 {
@@ -108,6 +113,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster2_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@300 {
@@ -123,6 +129,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster3_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@301 {
@@ -138,6 +145,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster3_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@400 {
@@ -153,6 +161,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster4_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@401 {
@@ -168,6 +177,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster4_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@500 {
@@ -183,6 +193,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster5_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@501 {
@@ -198,6 +209,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster5_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@600 {
@@ -213,6 +225,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster6_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@601 {
@@ -228,6 +241,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster6_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@700 {
@@ -243,6 +257,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster7_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cpu@701 {
@@ -258,6 +273,7 @@
 			i-cache-line-size = <64>;
 			i-cache-sets = <192>;
 			next-level-cache = <&cluster7_l2>;
+			cpu-idle-states = <&cpu_pw20>;
 		};
 
 		cluster0_l2: l2-cache0 {
@@ -323,6 +339,15 @@
 			cache-sets = <1024>;
 			cache-level = <2>;
 		};
+
+		cpu_pw20: cpu-pw20 {
+			compatible = "arm,idle-state";
+			idle-state-name = "PW20";
+			arm,psci-suspend-param = <0x0>;
+			entry-latency-us = <2000>;
+			exit-latency-us = <2000>;
+			min-residency-us = <6000>;
+		  };
 	};
 
 	gic: interrupt-controller@6000000 {
@@ -472,92 +497,6 @@
 			#size-cells = <0>;
 			little-endian;	/* force the driver in LE mode */
 			status = "disabled";
-		};
-
-		pcs_mdio1: mdio@0x8c07000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c07000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio2: mdio@0x8c0b000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c0b000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio3: mdio@0x8c0f000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c0f000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio4: mdio@0x8c13000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c13000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio5: mdio@0x8c17000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c17000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio6: mdio@0x8c1b000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c1b000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio7: mdio@0x8c1f000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c1f000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		pcs_mdio8: mdio@0x8c23000 {
-			compatible = "fsl,fman-memac-mdio";
-			reg = <0x0 0x8c23000 0x0 0x1000>;
-			device_type = "mdio";
-			little-endian;
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-		};
-
-		serdes1: serdes@1ea0000 {
-				compatible = "fsl,serdes-28g";
-				reg = <0x0 0x1ea0000 0 0x00002000>;
-				little-endian;
 		};
 
 		i2c0: i2c@2000000 {
@@ -711,6 +650,24 @@
 			broken-cd;
 			little-endian;
 			bus-width = <4>;
+			status = "disabled";
+		};
+
+		can0: can@2180000 {
+			compatible = "fsl,lx2160ar1-flexcan";
+			reg = <0x0 0x2180000 0x0 0x10000>;
+			interrupts = <GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&sysclk>, <&clockgen 4 7>;
+			clock-names = "ipg", "per";
+			status = "disabled";
+		};
+
+		can1: can@2190000 {
+			compatible = "fsl,lx2160ar1-flexcan";
+			reg = <0x0 0x2190000 0x0 0x10000>;
+			interrupts = <GIC_SPI 22 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&sysclk>, <&clockgen 4 7>;
+			clock-names = "ipg", "per";
 			status = "disabled";
 		};
 
@@ -1047,7 +1004,7 @@
 			#size-cells = <0>;
 			reg = <0x0 0x20c0000 0x0 0x10000>,
 				<0x0 0x20000000 0x0 0x10000000>;
-			reg-names = "FSPI", "FSPI-memory";
+			reg-names = "fspi_base", "fspi_mmap";
 			interrupts = <0 25 0x4>; /* Level high type */
 			clocks = <&clockgen 4 3>, <&clockgen 4 3>;
 			clock-names = "fspi_en", "fspi";
@@ -1056,7 +1013,9 @@
 		sata0: sata@3200000 {
 			status = "disabled";
 			compatible = "fsl,lx2160a-ahci";
-			reg = <0x0 0x3200000 0x0 0x10000>;
+			reg = <0x0 0x3200000 0x0 0x10000>,
+			      <0x7 0x100520 0x0 0x4>;
+			reg-names = "ahci", "sata-ecc";
 			interrupts = <GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clockgen 4 3>;
 			dma-coherent;
@@ -1065,7 +1024,9 @@
 		sata1: sata@3210000 {
 			status = "disabled";
 			compatible = "fsl,lx2160a-ahci";
-			reg = <0x0 0x3210000 0x0 0x10000>;
+			reg = <0x0 0x3210000 0x0 0x10000>,
+			      <0x7 0x100520 0x0 0x4>;
+			reg-names = "ahci", "sata-ecc";
 			interrupts = <GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clockgen 4 3>;
 			dma-coherent;
@@ -1074,7 +1035,9 @@
 		sata2: sata@3220000 {
 			status = "disabled";
 			compatible = "fsl,lx2160a-ahci";
-			reg = <0x0 0x3220000 0x0 0x10000>;
+			reg = <0x0 0x3220000 0x0 0x10000>,
+			      <0x7 0x100520 0x0 0x4>;
+			reg-names = "ahci", "sata-ecc";
 			interrupts = <GIC_SPI 97 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clockgen 4 3>;
 			dma-coherent;
@@ -1083,7 +1046,9 @@
 		sata3: sata@3230000 {
 			status = "disabled";
 			compatible = "fsl,lx2160a-ahci";
-			reg = <0x0 0x3230000 0x0 0x10000>;
+			reg = <0x0 0x3230000 0x0 0x10000>,
+			      <0x7 0x100520 0x0 0x4>;
+			reg-names = "ahci", "sata-ecc";
 			interrupts = <GIC_SPI 100 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clockgen 4 3>;
 			dma-coherent;

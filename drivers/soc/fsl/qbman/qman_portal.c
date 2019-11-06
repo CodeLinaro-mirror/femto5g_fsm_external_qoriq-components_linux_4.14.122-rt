@@ -197,8 +197,10 @@ static int qman_offline_cpu(unsigned int cpu)
 	if (p) {
 		pcfg = qman_get_qm_portal_config(p);
 		if (pcfg) {
-			irq_set_affinity(pcfg->irq, cpumask_of(0));
-			qman_portal_update_sdest(pcfg, 0);
+			/* select any other online CPU */
+			cpu = cpumask_any_but(cpu_online_mask, cpu);
+			irq_set_affinity(pcfg->irq, cpumask_of(cpu));
+			qman_portal_update_sdest(pcfg, cpu);
 		}
 	}
 	return 0;
@@ -234,7 +236,7 @@ static int qman_portal_probe(struct platform_device *pdev)
 	struct qm_portal_config *pcfg;
 	struct resource *addr_phys[2];
 	void __iomem *va;
-	int irq, cpu, err;
+	int irq, cpu, err, i;
 	u32 val;
 
 	err = qman_is_probed();
@@ -350,6 +352,22 @@ static int qman_portal_probe(struct platform_device *pdev)
 	/* clear irq affinity if assigned cpu is offline */
 	if (!cpu_online(cpu))
 		qman_offline_cpu(cpu);
+
+	if (__qman_portals_probed == 1 && qman_requires_cleanup()) {
+		/*
+		 * QMan wasn't reset prior to boot (Kexec for example)
+		 * Empty all the frame queues so they are in reset state
+		 */
+		for (i = 0; i < qm_get_fqid_maxcnt(); i++) {
+			err =  qman_shutdown_fq(i);
+			if (err) {
+				dev_err(dev, "Failed to shutdown frame queue %d\n",
+					i);
+				goto err_portal_init;
+			}
+		}
+		qman_done_cleanup();
+	}
 
 	return 0;
 
