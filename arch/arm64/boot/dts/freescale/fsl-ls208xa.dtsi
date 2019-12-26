@@ -109,6 +109,8 @@
 		method = "smc";
 	};
 
+	#include "fsl-tmu.dtsi"
+
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -173,8 +175,6 @@
 			little-endian;
 			#thermal-sensor-cells = <1>;
 		};
-
-		#include "fsl-tmu.dtsi"
 
 		serial0: serial@21c0500 {
 			compatible = "fsl,ns16550", "ns16550a";
@@ -511,7 +511,7 @@
 		};
 
 		/* TODO: WRIOP (CCSR?) */
-		emdio1: mdio@8B96000 { /* WRIOP0: 0x8B8_0000,
+		emdio1: mdio@8b96000 { /* WRIOP0: 0x8B8_0000,
 					  * E-MDIO1: 0x1_6000
 					  */
 			compatible = "fsl,fman-memac-mdio";
@@ -524,7 +524,7 @@
 			#size-cells = <0>;
 		};
 
-		emdio2: mdio@8B97000 { /* WRIOP0: 0x8B8_0000,
+		emdio2: mdio@8b97000 { /* WRIOP0: 0x8B8_0000,
 					  * E-MDIO2: 0x1_7000
 					  */
 			compatible = "fsl,fman-memac-mdio";
@@ -758,12 +758,6 @@
 			interrupts = <0 44 4>;
 		};
 
-		qcom,fsm-dp {
-			compatible = "qcom,fsm-dp";
-			qcom,ul-bufs = <16384 4096>;
-			qcom,rx-queue-size = <1024 1024 1024 1024>;
-			dma-coherent;
-		};
 	};
 
 	ddr1: memory-controller@1080000 {
@@ -799,6 +793,13 @@
 			compatible = "linaro,optee-tz";
 			method = "smc";
 		};
+	};
+
+	qcom,fsm-dp {
+		compatible = "qcom,fsm-dp";
+		qcom,ul-bufs = <16384 4096>;
+		qcom,rx-queue-size = <1024 1024 1024 1024>;
+		dma-coherent;
 	};
 };
 
